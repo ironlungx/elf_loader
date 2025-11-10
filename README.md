@@ -103,6 +103,8 @@ xxd -i blink.elf > blink_payload.h  # Convert to header
 
 ```cpp
 #include <Arduino.h>
+#include <loader.h>
+
 #include "blink_payload.h"
 
 // Export symbols to the ELF
@@ -215,28 +217,31 @@ void setup() {
 To enable C++ features in your ELF files, export these additional runtime symbols:
 
 ```cpp
-// C++ Runtime Support
 extern "C" {
 extern void *__dso_handle;
+
 extern int __cxa_atexit(void (*destructor)(void *), void *arg, void *dso);
+
 extern void __cxa_pure_virtual() {
   Serial.println("ERROR: Pure virtual function called!");
-  while (1) delay(1000);
+  while (1)
+    delay(1000);
 }
+
 extern int __cxa_guard_acquire(uint64_t *guard);
+
 extern void __cxa_guard_release(uint64_t *guard);
+
 extern void __cxa_guard_abort(uint64_t *guard);
 }
 
 static const ELFLoaderSymbol_t exports[] = {
-    // Basic Arduino functions
     {"print", (void *)print},
     {"digitalRead", (void *)digitalRead},
     {"digitalWrite", (void *)digitalWrite},
     {"pinMode", (void *)pinMode},
     {"delay", (void *)delay},
 
-    // C++ runtime support
     {"__dso_handle", (void *)&__dso_handle},
     {"__cxa_atexit", (void *)__cxa_atexit},
     {"__cxa_pure_virtual", (void *)__cxa_pure_virtual},
@@ -245,11 +250,12 @@ static const ELFLoaderSymbol_t exports[] = {
     {"__cxa_guard_abort", (void *)__cxa_guard_abort},
 
     // C++ new/delete operators
-    {"_Znwj", (void *)malloc},   // operator new(unsigned int)
-    {"_ZdlPv", (void *)free},    // operator delete(void*)
-    {"_Znaj", (void *)malloc},   // operator new[](unsigned int)
-    {"_ZdaPv", (void *)free},    // operator delete[](void*)
+    {"_Znwj", (void *)malloc}, // operator new(unsigned int)
+    {"_ZdlPv", (void *)free},  // operator delete(void*)
+    {"_ZdlPvj", (void *)free}, // operator delete(void*, unsigned int)
+    {"_Znaj", (void *)malloc}, // operator new[](unsigned int)
+    {"_ZdaPv", (void *)free},  // operator delete[](void*)
+    {"_ZdaPvj", (void *)free}, // operator delete[](void*, unsigned int)
 };
-
 static const ELFLoaderEnv_t env = {exports, sizeof(exports) / sizeof(*exports)};
 ```
