@@ -85,7 +85,7 @@ extern "C" int local_main() {
 
 To compile it, just use the above build script and it should make a `*.elf` file for you :). You now have 2 options:
 
-### XXD
+### ELF inside a header
 You can test out your program by putting it into a header file using `xxd`:
 ```bash
 $ ./build # Build the project
@@ -135,4 +135,76 @@ void setup() {
 void loop() {}
 ```
 
-2. Use something like SD_FS or LittleFS (takes a bit more effort, but is probably what you want):
+### Proper filesystem
+Use something like SD_FS or LittleFS (takes a bit more effort, but is probably what you want):
+
+```cpp
+template <typename T> struct Array {
+  T *elem;
+  size_t len;
+};
+
+// Loads an elf file and puts it into an array
+bool load_elf(fs::FS &fs, const char *filename, Array<uint8_t> *location) {
+  // Open the file
+  File f = fs.open(filename, FILE_READ);
+  if (!f) {
+    Serial.printf("Failed to open: %s\n", filename);
+    return false;
+  }
+
+  location->len = f.size();
+  Serial.printf("ELF size: %zu bytes\n", location->len);
+
+  // Allocate a new buffer
+  location->elem = (uint8_t *)malloc(location->len);
+  if (!location->elem) {
+    Serial.println("Memory allocation failed");
+    f.close();
+    return false;
+  }
+
+  // Read the file
+  size_t bytesRead = f.read(location->elem, location->len);
+  f.close();
+
+  if (bytesRead != location->len) {
+    Serial.printf("Read error: expected %zu, got %zu\n", location->len,
+                  bytesRead);
+    free(location->elem);
+    location->elem = nullptr;
+    return false;
+  }
+
+  Serial.println("ELF loaded successfully");
+  return true;
+}
+
+void setup() {
+  // ...
+  // Setup SD and stuff
+
+  Array<uint8_t> elf;
+  if (!load_elf(SD, "/blink.elf", &elf)) {
+    Serial.println("Failed to load ELF file");
+    return;
+  }
+
+  ELFLoaderContext_t *ctx = elfLoaderInitLoadAndRelocate(elf.elem, &env);
+
+  if (!ctx) {
+    Serial.println("elfLoaderInitLoadAndRelocate failed");
+    return;
+  }
+
+  if (elfLoaderSetFunc(ctx, "local_main") != 0) {
+    Serial.println("elfLoaderSetFunc error: local_main function not found");
+    elfLoaderFree(ctx);
+    return;
+  }
+  Serial.println(
+      "Running local_main(0x10) function as int local_main(int arg)");
+
+  // You probably should free it after you're done with it, I'm not one to judge 
+}
+```
